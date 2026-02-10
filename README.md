@@ -1,102 +1,420 @@
 # Deep Learning for Facial 3D Reconstruction Simulator
 
-This project is a comprehensive tool for processing a 3D facial model, generating a diverse set of 2D images from it, and then using deep learning to find and correct for the most frontal pose. This workflow is particularly useful for preparing 3D assets for machine learning, computer vision, or other applications that require standardized input.
+This project is a comprehensive tool for processing a 3D facial model, generating a diverse set of 2D images from it, and then using deep learning to find and correct for the most frontal pose. This workflow is particularly useful for preparing 3D assets for machine learning, computer vision, or other applications that require standardised input.
+A comprehensive Python toolkit for normalising 3D head models, generating multi-angle rendered images, and performing automated head pose analysis. This pipeline is designed for creating synthetic datasets for head pose estimation, 3D model preprocessing, and computer vision research.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Pipeline Architecture](#pipeline-architecture)
+- [Configuration Reference](#configuration-reference)
+- [Output Structure](#output-structure)
+- [API Reference](#api-reference)
+- [Coordinate System Convention](#coordinate-system-convention)
+- [Troubleshooting](#troubleshooting)
+- [Dependencies](#dependencies)
+- [Use Cases](#use-cases)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+- [Contributing](#contributing)
+
+---
+
+## Overview
+
+This project provides an end-to-end pipeline that:
+
+1. **Normalizes 3D Models** — Centers, reorients, and scales OBJ models to a standard coordinate system
+2. **Generates Multi-Angle Renders** — Creates images from systematically varied yaw, pitch, and roll angles
+3. **Analyzes Head Pose** — Uses SixDRepNet to identify the most frontal-facing orientation
+4. **Produces Final Dataset** — Renders images from multiple camera heights (chin, nose, eye level)
+
+---
 
 ## Features
 
-  * **3D Model Normalization:** Automatically centers, orients, and scales 3D models for consistent use across different datasets.
-  * **Robust Axis Alignment:** Uses Principal Component Analysis (PCA) and geometric heuristics to align models to a standard Y-Up, Z-Forward coordinate system.
-  * **Customizable 3D Pose Generation:** Renders a large number of images by systematically rotating the model across yaw, pitch, and roll angles.
-  * **Head Pose Estimation:** Employs the `SixDRepNet` deep learning model to accurately predict the head pose (yaw, pitch, roll) from a 2D image.
-  * **Frontal Pose Correction:** Identifies the most frontal image from the generated dataset using a weighted scoring system and applies the corresponding rotation to the original 3D model.
-  * **Varied Viewpoint Generation:** Includes a separate script to generate images from multiple camera heights (chin, nose, eyes) with random jitter and tilt to create more realistic and varied datasets.
+- **Automatic Axis Alignment**: Uses PCA-based analysis to orient models to Y-Up, Z-Forward convention
+- **Uniform Scaling**: Fits models within a unit cube while preserving aspect ratio
+- **Comprehensive Rotation Sweep**: Generates 1,200+ images covering full 3D rotation space
+- **Neural Network Pose Detection**: Leverages SixDRepNet for accurate head pose estimation
+- **Multi-Viewpoint Rendering**: Captures models from chin, nose, and eye height perspectives
+- **Camera Jitter**: Adds controlled randomness for more realistic training data
+- **Green Screen Background**: Easy background removal for downstream processing
+
+---
+
+## Requirements
+
+### System Dependencies
+
+```bash
+apt-get update -qq
+apt-get install -y xvfb
+```
+
+### Python Dependencies
+
+```bash
+pip install trimesh[easy]
+pip install pyrender
+pip install --upgrade pyopengl
+pip install scipy
+pip install pyvirtualdisplay
+pip install pyglet
+pip install opencv-python
+pip install SixDRepNet
+```
+
+---
 
 ## Installation
 
-This project is designed to run in a Google Colab environment, which simplifies the setup. The required libraries are installed at the beginning of the notebook. If you are running this locally, you will need to install the dependencies manually.
+1. **Clone this repository:**
+```bash
+git clone https://github.com/yourusername/3d-head-pipeline.git
+cd 3d-head-pipeline
+```
 
-1.  **Install Required Libraries:**
-    ```bash
-    !pip install trimesh[easy]
-    !pip install pyrender
-    !pip install --upgrade pyopengl
-    !pip install scipy
-    !pip install pyvirtualdisplay -q
-    !pip install pyglet
-    !pip install opencv-python
-    !pip install SixDRepNet
-    !apt-get update -qq
-    !apt-get install -y xvfb -qq
-    ```
-      * `Trimesh` is used for 3D mesh processing.
-      * `PyRender` is for 3D rendering.
-      * `PyOpenGL` is a dependency for `PyRender`.
-      * `PyVirtualDisplay` and `Xvfb` are for headless rendering in environments like Google Colab.
-      * `SixDRepNet` is a library for 6D head pose estimation.
+2. **Install dependencies:**
+```bash
+pip install -r requirements.txt
+apt-get install -y xvfb
+```
 
-## How to Use
+3. **(Optional)** For Google Colab, dependencies install automatically via the notebook cells.
 
-The workflow is broken down into three main code blocks within the notebook.
+---
 
-### Step 1: Normalize the 3D Model
+## Quick Start
 
-This script centers, orients, and scales your 3D model.
+### Step 1: Normalize Your 3D Model
 
-1.  **Place your `.obj` file** in the same directory as the notebook.
-2.  **Update the `INPUT_FILE` variable** in the main block of the `normalize_model` function to point to your model's file path.
-    ```python
-    INPUT_FILE = '/content/your_model.obj'
-    OUTPUT_FILE = 'your_model_normalized.obj'
-    ```
-3.  **Run the cell.** The script will output a new file named `your_model_normalized.obj`.
+```python
+from normalize_model import normalize_model
 
-The `normalize_model` function performs the following transformations:
+normalize_model(
+    input_path='your_model.obj',
+    output_path='normalized_model.obj'
+)
+```
 
-  * **Centering:** Moves the mesh so its centroid is at the origin.
-  * **Axis Alignment:** Uses PCA to find the principal axes and rotates the model to a standard Y-Up, Z-Forward orientation.
-  * **Uniform Scaling:** Scales the model so its largest dimension is 1.0, ensuring it fits within a unit cube.
+### Step 2: Generate Rotation Sweep Images
 
-### Step 2: Generate 2D Images from Multiple Poses
+```python
+# Configure sweep parameters
+yaw_steps = 12      # Full 360° horizontal rotation
+pitch_steps = 10    # -60° to +30° vertical tilt  
+roll_steps = 10     # -180° to +180° head roll
 
-This section renders a large number of images from various head poses (yaw, pitch, and roll).
+# Generates 1,200 images (12 × 10 × 10)
+```
 
-1.  **Update the `model_filename` variable** to the output of the previous step:
-    ```python
-    model_filename = "your_model_normalized.obj"
-    ```
-2.  **Configure the `yaw_steps`, `pitch_steps`, and `roll_steps`** to control the number of images to generate. More steps result in a more detailed sweep but take longer to process.
-3.  **Run the cell.** The script will create a new directory (`rendered_images` by default) and save the generated images in `.png` format.
+### Step 3: Find Most Frontal Pose
 
-### Step 3: Find the Most Frontal Image and Correct the 3D Model
+```python
+from find_frontal import find_most_frontal_image
 
-This final step analyzes the generated images to find the one closest to a frontal pose and then applies that correction to the 3D model.
+best_image, angles = find_most_frontal_image(
+    image_folder='rendered_images',
+    yaw_weight=2.5,
+    pitch_weight=1.5,
+    roll_weight=0.5
+)
+```
 
-1.  **Update the paths** to match your output directory and model files:
-    ```python
-    image_folder = '/content/rendered_images'
-    output_path = '/content/most_frontal_image.png'
-    model_path = '/content/your_model_normalized.obj'
-    rotated_model_path = '/content/rotated_head.obj'
-    ```
-2.  **Adjust the `yaw_weight`, `pitch_weight`, and `roll_weight`** variables to fine-tune the frontal pose criteria. A higher weight makes that angle's deviation from zero more penalized in the final score.
-3.  **Run the cell.** The script will iterate through the images, calculate a weighted score for each, and identify the one with the lowest score. It will then:
-      * Print the filename and the predicted yaw, pitch, and roll angles of the best image.
-      * Save the best image with a drawn pose axis to `most_frontal_image.png`.
-      * Apply the inverse rotation to the `your_model_normalized.obj` and save the final corrected model as `rotated_head.obj`.
+### Step 4: Generate Final Dataset
 
-### Step 4: (Optional) Generate a Realistic Dataset
+```python
+# Renders from three camera heights:
+# - Chin level (y = -1.0)
+# - Nose level (y = -0.6)  
+# - Eye level  (y = -0.2)
+```
 
-The last part of the notebook provides a separate script to render a dataset from three different camera heights, introducing random jitter to simulate more realistic camera movements.
+---
 
-1.  **Update `model_filename`** to use the newly corrected model:
-    ```python
-    model_filename = '/content/rotated_head.obj'
-    ```
-2.  **Set `OUTPUT_FOLDER`** to your desired output location, for example, a Google Drive folder.
-3.  **Configure `CAMERA_TARGET_OFFSET_Y`** to adjust the camera's vertical aim. A value of `0.15` or `0.2` is often good for models with shoulders, while `0.0` is suitable for head-only models.
-4.  **Run the cell.** The script will generate a new set of images from the specified viewpoints, saving them to the output folder.
+## Pipeline Architecture
 
-* The `SixDRepNet` model is used to predict the yaw, pitch, and roll angles for each image.
-* A **"weighted score"** is calculated for each image. A lower score indicates a more frontal pose, with adjustable weights prioritizing a straight-on view.
-* The image with the lowest score is selected as the best frontal image. The angles from this image are then used to reorient the original 3D model, saving the result as `rotated_head.obj`.
-* An additional script generates images from different camera heights (chin, nose, eyes) with random jitter and tilt to create an even more realistic and varied dataset.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    INPUT: Raw 3D Model (.obj)                   │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    STAGE 1: Normalization                       │
+│  • Center at origin                                             │
+│  • PCA-based axis alignment                                     │
+│  • Uniform scaling to unit cube                                 │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    STAGE 2: Axis Verification                   │
+│  • Heuristic check for Y-Up orientation                         │
+│  • Corrective rotation if needed                                │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                 STAGE 3: Full Rotation Sweep                    │
+│  • 12 yaw × 10 pitch × 10 roll = 1,200 images                   │
+│  • Systematic coverage of 3D rotation space                     │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│               STAGE 4: Frontal Pose Detection                   │
+│  • SixDRepNet neural network analysis                           │
+│  • Weighted scoring: yaw > pitch > roll                         │
+│  • Constraint filtering for valid poses                         │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              STAGE 5: Model Pose Correction                     │
+│  • Apply inverse rotation to align frontal                      │
+│  • Export corrected model                                       │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│            STAGE 6: Multi-Viewpoint Rendering                   │
+│  • Chin height camera (looking up)                              │
+│  • Nose height camera (eye level)                               │
+│  • Eye height camera (slightly above)                           │
+│  • Camera jitter for variation                                  │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              OUTPUT: Rendered Image Dataset                     │
+│  • 30 final images (10 per viewpoint)                           │
+│  • Green screen background                                      │
+│  • 2048×2048 resolution                                         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Configuration Reference
+
+### Normalization Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `tolerance` | 1e-4 | Acceptable centroid offset after centering |
+
+### Rotation Sweep Parameters
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `yaw_steps` | 12 | Divisions for Y-axis rotation (-180° to +180°) |
+| `pitch_steps` | 10 | Divisions for X-axis rotation (-60° to +30°) |
+| `roll_steps` | 10 | Divisions for Z-axis rotation (-180° to +180°) |
+
+### Pose Detection Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `yaw_weight` | 2.5 | Importance of horizontal facing direction |
+| `pitch_weight` | 1.5 | Importance of vertical head tilt |
+| `roll_weight` | 0.5 | Importance of head roll (least significant) |
+| `pitch_min/max` | 0°/15° | Acceptable pitch range |
+| `roll_min/max` | 0°/15° | Acceptable roll range |
+| `yaw_min/max` | -25°/25° | Acceptable yaw range |
+
+### Rendering Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `image_resolution` | (2048, 2048) | Output image dimensions |
+| `jitter_strength` | 0.05 | Camera position randomization |
+| `tilt_strength_deg` | 2.0 | Camera rotation randomization |
+| `light_intensity` | 40.0 | Directional light brightness |
+| `ambient_light` | 0.7 | Ambient illumination level |
+| `fov` | π/3 | Camera field of view (60°) |
+
+### Viewpoint Configurations
+
+| Viewpoint | Y Position | Distance | Description |
+|-----------|------------|----------|-------------|
+| `chin_height` | -1.0 | 2.0 | Camera below chin, looking up |
+| `nose_height` | -0.6 | 2.0 | Camera at nose level |
+| `eyes_height` | -0.2 | 2.0 | Camera at eye level |
+
+---
+
+## Output Structure
+
+```
+rendered_images/
+├── head_yaw00_pitch00_roll00.png
+├── head_yaw00_pitch00_roll01.png
+├── ...
+└── head_yaw11_pitch09_roll09.png
+
+most_frontal_image.png          # Best frontal pose with axis visualization
+rotated_head.obj                # Pose-corrected 3D model
+
+rendered_images_final/
+├── head_chin_height_00.png
+├── head_chin_height_01.png
+├── ...
+├── head_nose_height_00.png
+├── ...
+├── head_eyes_height_00.png
+└── ...
+```
+
+---
+
+## API Reference
+
+### `normalize_model(input_path, output_path)`
+
+Normalizes a 3D model by centering, reorienting, and scaling.
+
+**Parameters:**
+- `input_path` (str): Path to input OBJ file
+- `output_path` (str): Path for normalized output
+
+**Process:**
+1. Centers mesh at world origin
+2. Computes principal inertia vectors via PCA
+3. Disambiguates axis directions using geometry
+4. Constructs orthonormal basis and rotation matrix
+5. Scales uniformly to fit in unit cube
+
+---
+
+### `generate_full_3d_rotations(yaw_steps, pitch_steps, roll_steps)`
+
+Generates arrays of rotation angles for systematic pose sampling.
+
+**Parameters:**
+- `yaw_steps` (int): Number of divisions for yaw (left-right rotation)
+- `pitch_steps` (int): Number of divisions for pitch (up-down rotation)
+- `roll_steps` (int): Number of divisions for roll (head tilt)
+
+**Returns:**
+- `yaw_angles`: Array of Y-axis rotations (radians)
+- `pitch_angles`: Array of X-axis rotations (radians)
+- `roll_angles`: Array of Z-axis rotations (radians)
+
+---
+
+### `lookAt(eye, target, up)`
+
+Computes a camera pose matrix for positioning and orienting the camera.
+
+**Parameters:**
+- `eye` (np.array): Camera position in world coordinates
+- `target` (np.array): Point the camera looks at
+- `up` (np.array): Up direction vector (default: Y-up)
+
+**Returns:**
+- 4×4 transformation matrix
+
+---
+
+## Coordinate System Convention
+
+This pipeline uses the following coordinate system:
+
+```
+        +Y (Up)
+         │
+         │
+         │
+         └───────── +X (Right)
+        /
+       /
+      /
+    +Z (Forward/Camera)
+```
+
+- **Y-Axis**: Points upward (top of head)
+- **Z-Axis**: Points forward (direction face is looking)
+- **X-Axis**: Points to the right (right ear direction)
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**1. "Virtual display not started"**
+- This is normal on desktop environments
+- Ensure `xvfb` is installed for headless servers
+
+**2. "PyRender requires PyOpenGL==3.1.0" warning**
+- The upgraded PyOpenGL (3.1.10) works fine
+- This warning can be safely ignored
+
+**3. Model appears rotated incorrectly**
+- The PCA-based alignment depends on mesh geometry
+- For models with shoulders, vertices may bias the principal axes
+- Adjust the `CAMERA_TARGET_OFFSET_Y` parameter
+
+**4. SixDRepNet not detecting faces**
+- Ensure rendered images show sufficient facial features
+- Adjust lighting intensity if images are too dark/bright
+- Verify pitch/roll constraints aren't too restrictive
+
+### Performance Tips
+
+- Reduce `image_resolution` for faster processing
+- Decrease rotation step counts for quick tests
+- Use GPU acceleration with `gpu_id=0` for SixDRepNet
+
+---
+
+## Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| trimesh | ≥4.7.4 | 3D mesh loading and manipulation |
+| pyrender | ≥0.1.45 | OpenGL-based rendering |
+| numpy | ≥1.19.5 | Numerical computations |
+| opencv-python | ≥4.5.5 | Image processing |
+| SixDRepNet | ≥0.1.6 | Head pose estimation |
+| scipy | ≥1.5.4 | Scientific computing |
+| Pillow | ≥8.4.0 | Image file handling |
+| pyvirtualdisplay | latest | Headless display support |
+
+---
+
+## Use Cases
+
+- **Synthetic Training Data**: Generate labeled head pose datasets
+- **3D Model Preprocessing**: Standardize models from various sources
+- **Head Pose Estimation Research**: Benchmark pose detection algorithms
+- **AR/VR Applications**: Prepare head models for real-time rendering
+- **Animation Pipelines**: Orient character heads consistently
+
+---
+
+## License
+
+This project is provided for educational and research purposes.
+
+---
+
+## Acknowledgments
+
+- [SixDRepNet](https://github.com/thohemp/SixDRepNet) for head pose estimation
+- [Trimesh](https://trimsh.org/) for 3D mesh processing
+- [PyRender](https://pyrender.readthedocs.io/) for 3D rendering
+
+---
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues and pull requests.
